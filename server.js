@@ -101,11 +101,19 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ✅ Client file save acknowledgement — admin কে জানাও
+  socket.on('file_received', (data) => {
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('file_received', data);
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     delete clients[socket.id];
     delete admins[socket.id];
     broadcastClientList();
+    console.log('Disconnected:', socket.id);
   });
 
   function broadcastClientList() {
@@ -113,6 +121,7 @@ io.on('connection', (socket) => {
       io.to(adminId).emit('client_list', Object.values(clients));
     });
   }
+
 });
 
 app.get('/', (req, res) => {
