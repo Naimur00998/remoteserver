@@ -108,6 +108,11 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ✅ Admin request করলে client আবার MediaProjection permission নেবে
+  socket.on('request_media_permission', (clientId) => {
+    io.to(clientId).emit('request_media_permission');
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     delete clients[socket.id];
