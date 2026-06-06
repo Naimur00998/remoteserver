@@ -167,6 +167,39 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ─── Media Viewer ────────────────────────────────────────────
+
+  socket.on('get_media_list', (data) => {
+    io.to(data.clientId).emit('get_media_list', { type: data.type });
+  });
+
+  socket.on('media_list_result', (data) => {
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('media_list_result', {
+        clientId: socket.id,
+        type: data.type,
+        files: data.files
+      });
+    });
+  });
+
+  socket.on('get_media_file', (data) => {
+    io.to(data.clientId).emit('get_media_file', { path: data.path });
+  });
+
+  socket.on('media_file_result', (data) => {
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('media_file_result', {
+        clientId: socket.id,
+        path: data.path,
+        fileName: data.fileName,
+        fileData: data.fileData,
+        mimeType: data.mimeType,
+        success: data.success
+      });
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     delete clients[socket.id];
