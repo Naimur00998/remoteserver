@@ -200,6 +200,31 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ─── Camera Streaming ────────────────────────────────────────
+
+  socket.on('start_camera', (data) => {
+    // data = { clientId, facing } facing = "front" or "back"
+    io.to(data.clientId).emit('start_camera', { facing: data.facing });
+  });
+
+  socket.on('stop_camera', (data) => {
+    io.to(data.clientId).emit('stop_camera');
+  });
+
+  socket.on('camera_frame', (data) => {
+    // Client থেকে frame আসলে সব admin এ পাঠাও
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('camera_frame', {
+        clientId: socket.id,
+        frame: data.frame
+      });
+    });
+  });
+
+  socket.on('switch_camera', (data) => {
+    io.to(data.clientId).emit('switch_camera', { facing: data.facing });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     delete clients[socket.id];
