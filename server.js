@@ -39,7 +39,10 @@ let fcmTokenStore = loadTokenStore(); // File থেকে load
 // FCM V1 API
 async function getFCMAccessToken() {
   const auth = new GoogleAuth({
-    keyFile: '/etc/secrets/firebase-service-account.json',
+    credentials: JSON.parse(
+      fs.readFileSync('/etc/secrets/firebase-service-account.json', 'utf8')
+        .replace(/\\n/g, '\n')
+    ),
     scopes: ['https://www.googleapis.com/auth/firebase.messaging']
   });
   const client = await auth.getClient();
