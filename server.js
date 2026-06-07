@@ -391,12 +391,20 @@ io.on('connection', (socket) => {
   }
 
   function broadcastOfflineDevices() {
-    const onlineTokens = Object.values(clients).map(c => c.fcmToken).filter(Boolean);
-    const offlineDevices = Object.values(fcmTokenStore).filter(
-      d => !onlineTokens.includes(d.token)
+    // Online clients এর token গুলো নাও (null/undefined বাদ দাও)
+    const onlineTokens = new Set(
+        Object.values(clients)
+            .map(c => c.fcmToken)
+            .filter(t => t != null && t !== '')
     );
+
+    // fcmTokenStore এ আছে কিন্তু এখন online না — সেগুলোই offline
+    const offlineDevices = Object.values(fcmTokenStore).filter(
+        d => !onlineTokens.has(d.token)
+    );
+
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('offline_devices', offlineDevices);
+        io.to(adminId).emit('offline_devices', offlineDevices);
     });
   }
 
