@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const { GoogleAuth } = require('google-auth-library');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -9,6 +10,47 @@ const io = new Server(server, {
 
 let clients = {};
 let admins = {};
+
+// FCM V1 API
+async function getFCMAccessToken() {
+  const auth = new GoogleAuth({
+    keyFile: '/etc/secrets/firebase-service-account.json',
+    scopes: ['https://www.googleapis.com/auth/firebase.messaging']
+  });
+  const client = await auth.getClient();
+  const token = await client.getAccessToken();
+  return token.token;
+}
+
+async function sendFCMNotification(fcmToken) {
+  try {
+    const accessToken = await getFCMAccessToken();
+    const response = await fetch(
+      'https://fcm.googleapis.com/v1/projects/remoteclient-361ff/messages:send',
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: {
+            token: fcmToken,
+            data: { action: 'WAKE_UP' },
+            android: {
+              priority: 'high'
+            }
+          }
+        })
+      }
+    );
+    const result = await response.json();
+    console.log('FCM sent:', result);
+    return result;
+  } catch (e) {
+    console.error('FCM error:', e);
+  }
+}
 
 io.on('connection', (socket) => {
 
@@ -33,6 +75,31 @@ io.on('connection', (socket) => {
       clients[socket.id].network = data.network;
       clients[socket.id].isCharging = data.isCharging;
       broadcastClientList();
+    }
+  });
+
+  // Client FCM token register
+  socket.on('register_fcm_token', (data) => {
+    if (clients[socket.id]) {
+      clients[socket.id].fcmToken = data.token;
+      console.log('FCM token registered for:', clients[socket.id].name);
+    }
+  });
+
+  // Admin wake up client
+  socket.on('wake_client', async (clientId) => {
+    const client = clients[clientId];
+    if (client && client.fcmToken) {
+      await sendFCMNotification(client.fcmToken);
+      console.log('Wake sent to:', client.name);
+    } else {
+      // Admin কে জানাও
+      Object.keys(admins).forEach(adminId => {
+        io.to(adminId).emit('wake_result', { 
+          success: false, 
+          error: 'No FCM token' 
+        });
+      });
     }
   });
 
