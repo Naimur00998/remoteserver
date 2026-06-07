@@ -368,18 +368,19 @@ io.on('connection', (socket) => {
 
   // Disconnect
   socket.on('disconnect', () => {
+    console.log('Disconnected client data:', clients[socket.id]); // debug
     if (clients[socket.id]) {
-      // Offline এ move করো, delete না
       const client = clients[socket.id];
       if (client.fcmToken) {
         fcmTokenStore[client.fcmToken].lastSeen = new Date().toISOString();
-        saveTokenStore(); // File এ update করো
+        saveTokenStore();
       }
     }
     delete clients[socket.id];
     delete admins[socket.id];
     broadcastClientList();
     broadcastOfflineDevices();
+    console.log('Offline devices count:', Object.keys(fcmTokenStore).length); // debug
     console.log('Disconnected:', socket.id);
   });
 
