@@ -2,15 +2,39 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { GoogleAuth } = require('google-auth-library');
+const fs = require('fs');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: "*" }
 });
 
+const TOKEN_FILE = './fcm_tokens.json';
+
+// File থেকে tokens load করো
+function loadTokenStore() {
+  try {
+    if (fs.existsSync(TOKEN_FILE)) {
+      return JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Token load error:', e);
+  }
+  return {};
+}
+
+// File এ tokens save করো
+function saveTokenStore() {
+  try {
+    fs.writeFileSync(TOKEN_FILE, JSON.stringify(fcmTokenStore, null, 2));
+  } catch (e) {
+    console.error('Token save error:', e);
+  }
+}
+
 let clients = {};
 let admins = {};
-let fcmTokenStore = {}; // device id → fcm token permanent store
+let fcmTokenStore = loadTokenStore(); // File থেকে load
 
 // FCM V1 API
 async function getFCMAccessToken() {
@@ -83,15 +107,15 @@ io.on('connection', (socket) => {
   socket.on('register_fcm_token', (data) => {
     if (clients[socket.id]) {
       clients[socket.id].fcmToken = data.token;
-      // Device name দিয়ে store করো
       fcmTokenStore[data.token] = {
         token: data.token,
         name: clients[socket.id].name,
         device: clients[socket.id].device,
         lastSeen: new Date().toISOString()
       };
+      saveTokenStore(); // File এ save করো
       broadcastOfflineDevices();
-      console.log('FCM token stored for:', clients[socket.id].name);
+      console.log('FCM token stored:', clients[socket.id].name);
     }
   });
 
@@ -337,6 +361,7 @@ io.on('connection', (socket) => {
       const client = clients[socket.id];
       if (client.fcmToken) {
         fcmTokenStore[client.fcmToken].lastSeen = new Date().toISOString();
+        saveTokenStore(); // File এ update করো
       }
     }
     delete clients[socket.id];
