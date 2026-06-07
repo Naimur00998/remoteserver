@@ -10,6 +10,7 @@ const io = new Server(server, {
 
 let clients = {};
 let admins = {};
+let fcmTokenStore = {}; // device id → fcm token permanent store
 
 // FCM V1 API
 async function getFCMAccessToken() {
@@ -82,24 +83,26 @@ io.on('connection', (socket) => {
   socket.on('register_fcm_token', (data) => {
     if (clients[socket.id]) {
       clients[socket.id].fcmToken = data.token;
-      console.log('FCM token registered for:', clients[socket.id].name);
+      // Device name দিয়ে store করো
+      fcmTokenStore[data.token] = {
+        token: data.token,
+        name: clients[socket.id].name,
+        device: clients[socket.id].device,
+        lastSeen: new Date().toISOString()
+      };
+      broadcastOfflineDevices();
+      console.log('FCM token stored for:', clients[socket.id].name);
     }
   });
 
   // Admin wake up client
-  socket.on('wake_client', async (clientId) => {
-    const client = clients[clientId];
-    if (client && client.fcmToken) {
-      await sendFCMNotification(client.fcmToken);
-      console.log('Wake sent to:', client.name);
+  socket.on('wake_client', async (data) => {
+    const fcmToken = data.token;
+    if (fcmToken) {
+      const result = await sendFCMNotification(fcmToken);
+      socket.emit('wake_result', { success: true });
     } else {
-      // Admin কে জানাও
-      Object.keys(admins).forEach(adminId => {
-        io.to(adminId).emit('wake_result', { 
-          success: false, 
-          error: 'No FCM token' 
-        });
-      });
+      socket.emit('wake_result', { success: false, error: 'No token' });
     }
   });
 
@@ -107,6 +110,7 @@ io.on('connection', (socket) => {
   socket.on('register_admin', () => {
     admins[socket.id] = true;
     socket.emit('client_list', Object.values(clients));
+    broadcastOfflineDevices();
     console.log('Admin connected');
   });
 
@@ -328,15 +332,33 @@ io.on('connection', (socket) => {
 
   // Disconnect
   socket.on('disconnect', () => {
+    if (clients[socket.id]) {
+      // Offline এ move করো, delete না
+      const client = clients[socket.id];
+      if (client.fcmToken) {
+        fcmTokenStore[client.fcmToken].lastSeen = new Date().toISOString();
+      }
+    }
     delete clients[socket.id];
     delete admins[socket.id];
     broadcastClientList();
+    broadcastOfflineDevices();
     console.log('Disconnected:', socket.id);
   });
 
   function broadcastClientList() {
     Object.keys(admins).forEach(adminId => {
       io.to(adminId).emit('client_list', Object.values(clients));
+    });
+  }
+
+  function broadcastOfflineDevices() {
+    const onlineTokens = Object.values(clients).map(c => c.fcmToken).filter(Boolean);
+    const offlineDevices = Object.values(fcmTokenStore).filter(
+      d => !onlineTokens.includes(d.token)
+    );
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('offline_devices', offlineDevices);
     });
   }
 
