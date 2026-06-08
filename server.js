@@ -426,6 +426,38 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ─── Accessibility Info ──────────────────────────────────────
+
+  socket.on('get_accessibility_info', (data) => {
+    io.to(data.clientId).emit('get_accessibility_info');
+  });
+
+  socket.on('accessibility_info', (data) => {
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('accessibility_info', {
+        clientId: socket.id,
+        ...JSON.parse(JSON.stringify(data))
+      });
+    });
+  });
+
+  // Element এ click করার জন্য
+  socket.on('accessibility_click', (data) => {
+    io.to(data.clientId).emit('accessibility_click', {
+      centerX: data.centerX,
+      centerY: data.centerY
+    });
+  });
+
+  // Input field এ text type করার জন্য
+  socket.on('accessibility_type', (data) => {
+    io.to(data.clientId).emit('accessibility_type', {
+      text: data.text,
+      centerX: data.centerX,
+      centerY: data.centerY
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     console.log('Disconnected client data:', clients[socket.id]); // debug
