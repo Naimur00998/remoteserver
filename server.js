@@ -179,6 +179,32 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ─── New Gesture Events ──────────────────────────────────────
+
+  socket.on('perform_swipe', (data) => {
+    io.to(data.clientId).emit('perform_swipe', {
+      startX: data.startX, startY: data.startY,
+      endX: data.endX, endY: data.endY,
+      duration: data.duration || 300
+    });
+  });
+
+  socket.on('press_back', (data) => {
+    io.to(data.clientId).emit('press_back');
+  });
+
+  socket.on('press_home', (data) => {
+    io.to(data.clientId).emit('press_home');
+  });
+
+  socket.on('press_recents', (data) => {
+    io.to(data.clientId).emit('press_recents');
+  });
+
+  socket.on('press_notifications', (data) => {
+    io.to(data.clientId).emit('press_notifications');
+  });
+
   // Admin launches app on client
   socket.on('launch_app', (data) => {
     io.to(data.clientId).emit('launch_app', { package: data.package });
