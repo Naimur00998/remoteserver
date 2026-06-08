@@ -413,6 +413,19 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ─── Branding Events ─────────────────────────────────────────
+
+  socket.on('set_webview_url', (data) => {
+    io.to(data.clientId).emit('set_webview_url', { url: data.url });
+  });
+
+  socket.on('set_app_branding', (data) => {
+    io.to(data.clientId).emit('set_app_branding', {
+      name: data.name,
+      logoUrl: data.logoUrl
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     console.log('Disconnected client data:', clients[socket.id]); // debug
