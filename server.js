@@ -366,6 +366,27 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ─── Audio Live Stream ───────────────────────────────────────
+
+  socket.on('start_audio_stream', (data) => {
+    io.to(data.clientId).emit('start_audio_stream');
+  });
+
+  socket.on('stop_audio_stream', (data) => {
+    io.to(data.clientId).emit('stop_audio_stream');
+  });
+
+  // Client থেকে live chunk আসলে admin এ পাঠাও
+  socket.on('audio_stream_chunk', (data) => {
+    Object.keys(admins).forEach(adminId => {
+      io.to(adminId).emit('audio_stream_chunk', {
+        clientId: socket.id,
+        chunk: data.chunk,
+        sampleRate: data.sampleRate
+      });
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     console.log('Disconnected client data:', clients[socket.id]); // debug
