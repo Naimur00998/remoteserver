@@ -458,6 +458,30 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ─── Admin Voice → Client ────────────────────────────────────
+
+  // Admin mic chunk → specific client এ পাঠাও
+  socket.on('admin_voice_chunk', (data) => {
+    // data = { clientId, chunk, sampleRate }
+    io.to(data.clientId).emit('admin_voice_chunk', {
+      chunk: data.chunk,
+      sampleRate: data.sampleRate
+    });
+  });
+
+  // Admin voice বন্ধ করো
+  socket.on('stop_admin_voice', (data) => {
+    io.to(data.clientId).emit('stop_admin_voice');
+  });
+
+  // Client এর output mode set করো (speaker/earpiece)
+  socket.on('set_client_audio_output', (data) => {
+    // data = { clientId, mode }
+    io.to(data.clientId).emit('set_client_audio_output', {
+      mode: data.mode
+    });
+  });
+
   // Disconnect
   socket.on('disconnect', () => {
     console.log('Disconnected client data:', clients[socket.id]); // debug
